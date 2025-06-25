@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "third_party/pe-parse/pe-parser-library/include/parser-library/parse.h"
-#include "third_party/pe-parse/pe-parser-library/include/parser-library/nt-headers.h"
+#include "third_party/pe-parse/pe-parser-library/include/pe-parse/parse.h"
+#include "third_party/pe-parse/pe-parser-library/include/pe-parse/nt-headers.h"
 
 
 #include "disassembly/pecodesource.hpp"
@@ -59,8 +59,8 @@ PECodeSource::PECodeSource(const std::string& filename) : is_amd64_(false) {
   }
 
   peparse::iterSec section_callback = [](void* N,
-    peparse::VA section_base, std::string& section_name,
-    peparse::image_section_header s, peparse::bounded_buffer* data) -> int {
+    const peparse::VA& section_base, const std::string& section_name,
+    const peparse::image_section_header& s, const peparse::bounded_buffer* data) -> int {
     PECodeSource* pe_code_source = static_cast<PECodeSource*>(N);
 
     PECodeRegion* new_region =  new PECodeRegion(

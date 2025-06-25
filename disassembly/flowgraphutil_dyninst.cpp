@@ -60,15 +60,15 @@ InstructionGetter MakeDyninstInstructionGetter(
       for (const auto& instruction : block_instructions) {
         std::vector<std::string> operand_strings;
         std::vector<Dyninst::InstructionAPI::Operand> operands;
-        instruction.second->getOperands(operands);
+        instruction.second.getOperands(operands);
         for (const auto& operand : operands) {
           operand_strings.emplace_back(
             operand.format(
-              instruction.second->getArch(),
+              instruction.second.getArch(),
               instruction.first));
         }
         results->emplace_back(Instruction(
-          instruction.second->getOperation().format(), operand_strings));
+          instruction.second.getOperation().format(), operand_strings));
       }
       if (!results->empty()) {
         return true;

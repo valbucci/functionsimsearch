@@ -19,6 +19,6 @@ module = Extension(
   include_dirs = ['./'])
 
 setup (name = 'functionsimsearch', version = '0.01',
-  description = 'https://github.com/google/functionsimsearch',
+  description = 'https://github.com/googleprojectzero/functionsimsearch',
   ext_modules = [module])
 
