@@ -3,6 +3,7 @@
 
 #include <map>
 #include <string>
+#include <cstdint>
 
 extern std::map<uint64_t, const std::string> id_to_filename;
 extern std::map<uint64_t, const std::string> id_to_mode;

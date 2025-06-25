@@ -1,6 +1,9 @@
 #include <algorithm>
 #include <regex>
 #include <string>
+#include <cstdint>
+#include <vector>
+#include <cstdlib>
 
 // this regex was provided courtesy of mark brand.
 constexpr char extraction_regex[] =
