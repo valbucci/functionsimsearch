@@ -97,7 +97,7 @@ class TestFunctionSimSearch(unittest.TestCase):
     fg = functionsimsearch.FlowgraphWithInstructions()
     fg.from_json(jsonstring)
     hasher = functionsimsearch.SimHasher("../testdata/weights.txt")
-    function_hash = hasher.calculate_hash(fg)
+    function_hash = hasher.calculate_hash(fg)  # 0xa7b8692b650ea78e
     self.assertTrue(function_hash[0] == 0xa6ef292a658e83ee)
 
 
