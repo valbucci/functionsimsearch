@@ -14,7 +14,7 @@ functionality of SimHashing and nearest neighbor search.
 
 In order to build & install the Python extension, please issue:
 ```
-  python ./setup.py install --user
+  pip install .
 ```
 in the main FunctionSimSearch directory after you have built the rest of
 FunctionSimSearch.

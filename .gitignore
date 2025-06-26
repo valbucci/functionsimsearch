@@ -2,4 +2,4 @@ bin/
 build/
 tests/
 third_party/
-
+functionsimsearch.egg-info/

@@ -33,7 +33,7 @@ static PyObject* functionsimsearch_error;
 // Helper function to convert a Python object into a std::string. Used to min-
 // imize changes required to build the bindings for Python 2 and Python 3.
 bool PyObjectToString(PyObject* object, std::string* result) {
-  char* temp = nullptr;
+  const char* temp = nullptr;
 #if PY_MAJOR_VERSION == 2
   if (!PyString_Check(object)) {
     return false;
