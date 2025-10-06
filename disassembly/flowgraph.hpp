@@ -18,6 +18,8 @@
 #include <functional>
 #include <map>
 #include <vector>
+#include <cstdint>
+#include <string>
 
 /* A Flowgraph class designed to allow fast extraction of small subgraphs
  A set of target nodes is kept for each node allowing easy retrieval.

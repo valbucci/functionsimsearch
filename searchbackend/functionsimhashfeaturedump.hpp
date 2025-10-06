@@ -3,7 +3,7 @@
 
 #include "disassembly/functionfeaturegenerator.hpp"
 #include "disassembly/flowgraph.hpp"
-#include "searchbackend/functionsimhashfeaturedump.hpp"
+#include <cstdint>
 
 // Writes a DOT file for a given graphlet.
 void WriteFeatureDictionaryEntry(uint64_t hashA, uint64_t hashB,

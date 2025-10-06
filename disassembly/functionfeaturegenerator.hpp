@@ -1,6 +1,10 @@
 #ifndef FUNCTIONFEATUREGENERATOR_HPP
 #define FUNCTIONFEATUREGENERATOR_HPP
 
+#include <tuple>
+#include <string>
+#include <cstdint>
+
 typedef std::tuple<std::string, std::string, std::string> MnemTuple;
 typedef uint64_t address;
 class Flowgraph;

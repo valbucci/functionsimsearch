@@ -234,7 +234,7 @@ std::string Disassembly::GetDisassembly(uint32_t function_index) const {
         << ")\n";
 
       for (const auto& instruction : block_instructions) {
-        std::string rendered = instruction.second->format(instruction.first);
+        std::string rendered = instruction.second.format(instruction.first);
         output << "\t\t\t " << std::hex << instruction.first << ": " <<
         rendered << "\n";
       }

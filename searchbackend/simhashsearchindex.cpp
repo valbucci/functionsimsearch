@@ -14,6 +14,11 @@
 
 #include <tuple>
 #include <vector>
+#include <map>
+#include <cmath>
+#include <mutex>
+#include <algorithm>
+#include <cstdint>
 
 #include "util/bitpermutation.hpp"
 #include "searchbackend/simhashsearchindex.hpp"
@@ -146,12 +151,12 @@ uint64_t SimHashSearchIndex::QueryTopN(uint64_t hash_A, uint64_t hash_B,
 // search, so this is probably random".
 double SimHashSearchIndex::GetOddsOfRandomHit(
   uint32_t count) const {
-  static const double standard_dev = sqrt(static_cast<double>(128.0 * 0.5 * 0.5));
-  double deviation = fabs(count - 64.0);
+  static const double standard_dev = std::sqrt(static_cast<double>(128.0 * 0.5 * 0.5));
+  double deviation = std::fabs(count - 64.0);
   double number_of_standard_devs = deviation / standard_dev;
 
   double expected_frequency_outside_range = 1.0 /
-    (1 - erf( number_of_standard_devs / sqrt(2.0) ));
+    (1 - std::erf( number_of_standard_devs / std::sqrt(2.0) ));
   expected_frequency_outside_range /= GetNumberOfIndexedFunctions();
   return expected_frequency_outside_range;
 }

@@ -1,4 +1,5 @@
 #include "util/testutil.hpp"
+#include <cstdint>
 
 // Data describing where to find RarVM::ExecuteStandardFilter in various
 // optimization settings and compilers.
