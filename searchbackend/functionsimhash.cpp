@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <iostream>
 #include "InstructionDecoder.h"
 #include "util/util.hpp"
 #include "searchbackend/functionsimhash.hpp"
@@ -84,6 +85,7 @@ void FunctionSimHasher::CalculateFunctionSimHash(
   // the same value over and over again will 'dominate' the entire hash).
   std::map<uint64_t, uint64_t> feature_cardinalities;
 
+  // std::cout << "CalculateFunctionSimHash{IMM=" << default_immediate_weight_ << ",MNEM=" << default_mnemonic_weight_ << ",GRAPH=" << default_graphlet_weight_ << "}" << std::endl;
   // TODO(thomasdullien): The following code (for adding graph, mnemonic, and
   // immediate features) has a lot of code duplication and should be cleaned
   // up to be more DRY.

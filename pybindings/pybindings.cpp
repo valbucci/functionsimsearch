@@ -302,7 +302,7 @@ static int PySimHasher_init(PySimHasher* self, PyObject* args, PyObject *kwds) {
 
   // End of debug code.
   self->function_simhasher_ = new FunctionSimHasher(weightsfile,
-    feature_options, logging_options);
+    feature_options, logging_options, mnem_weight, graphlet_weight, immediate_weight);
   return 0;
 }
 
