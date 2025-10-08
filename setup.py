@@ -18,7 +18,7 @@ module = Extension(
     'pybindings/pybindings.cpp'],
   include_dirs = ['./'])
 
-setup (name = 'functionsimsearch', version = '0.01',
+setup (name = 'marcellisimsearch', version = '0.01',
   description = 'https://github.com/googleprojectzero/functionsimsearch',
   ext_modules = [module])
 
