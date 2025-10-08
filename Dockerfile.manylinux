@@ -1,0 +1,180 @@
+# Build on the official manylinux_2_28 image (PEP 600 baseline; ships /opt/python/cp* interpreters)
+FROM quay.io/pypa/manylinux_2_28_x86_64 AS base
+
+# 0) Basics & toolchain. manylinux_2_28 is AlmaLinux 8.
+#    Install build deps incl. Eigen, elfutils (libdw), gflags, etc.
+RUN set -eux; \
+    dnf -y update; \
+    dnf -y install dnf-plugins-core epel-release; \
+    (dnf -y config-manager --set-enabled crb || dnf -y config-manager --set-enabled powertools || true); \
+    dnf -y install \
+      gcc gcc-c++ make git wget patch which \
+      elfutils-libelf-devel elfutils-devel \
+      zlib-devel openssl-devel gflags-devel binutils-devel \
+      eigen3-devel gtest gtest-devel; \
+    dnf clean all
+
+# 0.1) Install a modern CMake (CMake policies/newer features)
+ADD https://github.com/Kitware/CMake/releases/download/v3.27.9/cmake-3.27.9-linux-x86_64.tar.gz /tmp/
+RUN set -eux; \
+    tar -C /opt -xf /tmp/cmake-3.27.9-linux-x86_64.tar.gz; \
+    ln -sf /opt/cmake-3.27.9-linux-x86_64/bin/* /usr/local/bin/; \
+    cmake --version
+
+# 1) Prefixes (keep third-party stuff tidy under /opt)
+ENV BOOST_ROOT=/opt/boost-1.89 \
+    TBB_ROOT=/opt/oneTBB-2021.11 \
+    DYNINST_ROOT=/opt/dyninst-13 \
+    PE_PARSE_ROOT=/opt/pe-parse \
+    SPII_ROOT=/opt/spii
+ENV CMAKE_PREFIX_PATH="${BOOST_ROOT};${TBB_ROOT};${DYNINST_ROOT};${PE_PARSE_ROOT};${SPII_ROOT}"
+
+# 2) Build Boost (Dyninst 13 wants ≥1.71)
+ADD https://archives.boost.io/release/1.89.0/source/boost_1_89_0.tar.gz /tmp/
+RUN set -eux; cd /tmp && tar xf boost_1_89_0.tar.gz && cd boost_1_89_0 && \
+    ./bootstrap.sh --prefix=${BOOST_ROOT} && \
+    ./b2 -j"$(nproc)" cxxstd=17 link=shared runtime-link=shared install && \
+    rm -rf /tmp/boost_1_89_0*
+ENV Boost_ROOT=${BOOST_ROOT} Boost_DIR=${BOOST_ROOT}/lib/cmake/Boost-1.89.0
+
+# 3) Build oneTBB (Dyninst needs 2019.9+)
+ADD https://github.com/oneapi-src/oneTBB/archive/refs/tags/v2021.11.0.tar.gz /tmp/
+RUN set -eux; cd /tmp && tar xf v2021.11.0.tar.gz && \
+    cmake -S oneTBB-2021.11.0 -B oneTBB-2021.11.0/build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=${TBB_ROOT} \
+          -DCMAKE_INSTALL_LIBDIR=lib64 \
+          -DTBB_TEST=OFF && \
+    cmake --build oneTBB-2021.11.0/build -j"$(nproc)" && \
+    cmake --install oneTBB-2021.11.0/build && \
+    rm -rf /tmp/oneTBB-2021.11.0*
+ENV TBB_DIR=${TBB_ROOT}/lib64/cmake/TBB
+
+# 4) Build Dyninst v13 (against Boost + oneTBB)
+ADD https://github.com/dyninst/dyninst/archive/refs/tags/v13.0.0.tar.gz /tmp/
+RUN set -eux; cd /tmp && tar xf v13.0.0.tar.gz && \
+    cmake -S dyninst-13.0.0 -B dyninst-13.0.0/build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=${DYNINST_ROOT} \
+      -DBoost_ROOT=${BOOST_ROOT} \
+      -DBoost_DIR=${BOOST_ROOT}/lib/cmake/Boost-1.89.0 \
+      -DTBB_DIR=${TBB_DIR} \
+      -DCMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}" && \
+    cmake --build dyninst-13.0.0/build -j"$(nproc)" && \
+    cmake --install dyninst-13.0.0/build && \
+    rm -rf /tmp/dyninst-13.0.0*
+
+# 5) Build spii
+RUN set -eux; \
+    git clone --depth=1 https://github.com/PetterS/spii.git /tmp/spii && \
+    cmake -S /tmp/spii -B /tmp/spii/build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=${SPII_ROOT} && \
+    cmake --build /tmp/spii/build -j"$(nproc)" && \
+    cmake --install /tmp/spii/build && \
+    rm -rf /tmp/spii
+
+# 6) Build pe-parse (shared)
+RUN set -eux; \
+    git clone --recurse-submodules https://github.com/trailofbits/pe-parse.git /tmp/pe-parse && \
+    cmake -S /tmp/pe-parse -B /tmp/pe-parse/build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=${PE_PARSE_ROOT} \
+      -DBUILD_SHARED_LIBS=ON && \
+    cmake --build /tmp/pe-parse/build -j"$(nproc)" && \
+    cmake --install /tmp/pe-parse/build && \
+    rm -rf /tmp/pe-parse
+
+# 7) Runtime search paths inside build image (helps tests/tools)
+ENV LD_LIBRARY_PATH="${DYNINST_ROOT}/lib64:${DYNINST_ROOT}/lib:${PE_PARSE_ROOT}/lib:${SPII_ROOT}/lib:${TBB_ROOT}/lib64:${BOOST_ROOT}/lib:${LD_LIBRARY_PATH}"
+
+# ---------- Prepare source once (vendor headers, pe-parse include shim) ----------
+FROM base AS prep-src
+WORKDIR /io/functionsimsearch
+COPY . .
+
+RUN set -eux; \
+  mkdir -p third_party/json/src third_party/PicoSHA2 third_party/pe-parse/pe-parser-library/include; \
+  curl -fsSL -o third_party/json/src/json.hpp \
+    https://github.com/nlohmann/json/releases/download/v3.1.2/json.hpp; \
+  git clone --depth=1 https://github.com/okdshin/PicoSHA2.git /tmp/PicoSHA2; \
+  cp /tmp/PicoSHA2/picosha2.h third_party/PicoSHA2/; \
+  ln -s /opt/pe-parse/include/pe-parse third_party/pe-parse/pe-parser-library/include/pe-parse; \
+  rm -rf /tmp/PicoSHA2
+
+# Drop all *_test.cpp from Makefile to avoid pulling gtest in the manylinux context
+RUN set -eux; sed -ri '/_test\.cpp/d' Makefile || true
+
+# ---------- Build your C++ tools ----------
+FROM base AS tools-build
+WORKDIR /io/functionsimsearch
+COPY --from=prep-src /io/functionsimsearch/ /io/functionsimsearch/
+
+# Fix stale lib name: elfutils provides libdw, not libdwarf
+RUN sed -ri 's/(^|[[:space:]])-ldwarf([[:space:]]|$)/ -ldw /g' Makefile
+
+# Compiler & linker hints (single definition)
+ENV CPPFLAGS="-I${BOOST_ROOT}/include -I${DYNINST_ROOT}/include -I${PE_PARSE_ROOT}/include -I${SPII_ROOT}/include -I${TBB_ROOT}/include -I/usr/include/eigen3"
+ENV LDFLAGS="-L${BOOST_ROOT}/lib -L${DYNINST_ROOT}/lib64 -L${DYNINST_ROOT}/lib -L${PE_PARSE_ROOT}/lib -L${SPII_ROOT}/lib -L${TBB_ROOT}/lib64 -L/usr/local/lib \
+  -Wl,-rpath,${BOOST_ROOT}/lib -Wl,-rpath,${DYNINST_ROOT}/lib64 -Wl,-rpath,${DYNINST_ROOT}/lib -Wl,-rpath,${PE_PARSE_ROOT}/lib -Wl,-rpath,${SPII_ROOT}/lib -Wl,-rpath,${TBB_ROOT}/lib64 -Wl,-rpath,/usr/local/lib"
+ENV LDLIBS="-lboost_system -lboost_thread -lboost_filesystem -lboost_chrono -lboost_date_time -lboost_timer -lpthread"
+
+# Link-time & runtime search paths and mirror libs into /usr/local/lib (Makefile uses -L/usr/local/lib)
+ENV LIBRARY_PATH="/opt/dyninst-13/lib64:/opt/dyninst-13/lib:/opt/pe-parse/lib:/opt/spii/lib:/usr/local/lib"
+ENV LD_LIBRARY_PATH="/opt/dyninst-13/lib64:/opt/dyninst-13/lib:/opt/pe-parse/lib:/opt/spii/lib:/usr/local/lib:${LD_LIBRARY_PATH}"
+RUN set -eux; \
+  mkdir -p /usr/local/lib; \
+  for d in /opt/dyninst-13/lib64 /opt/dyninst-13/lib /opt/pe-parse/lib /opt/spii/lib; do \
+    [ -d "$d" ] && find "$d" -maxdepth 1 -name 'lib*.so*' -exec ln -sf {} /usr/local/lib/ \; ; \
+  done
+
+RUN make clean || true && make -j"$(nproc)"
+
+# ---------- Build wheel (reuse same prepared tree) ----------
+FROM base AS wheel-build
+WORKDIR /io/functionsimsearch
+COPY --from=prep-src /io/functionsimsearch/ /io/functionsimsearch/
+
+# Keep Makefile’s lib name fix here too (some backends call into it)
+RUN sed -ri 's/(^|[[:space:]])-ldwarf([[:space:]]|$)/ -ldw /g' Makefile
+
+# Same flags/search paths
+ENV CPPFLAGS="-I${BOOST_ROOT}/include -I${DYNINST_ROOT}/include -I${PE_PARSE_ROOT}/include -I${SPII_ROOT}/include -I${TBB_ROOT}/include -I/usr/include/eigen3"
+ENV LDFLAGS="-L${BOOST_ROOT}/lib -L${DYNINST_ROOT}/lib64 -L${DYNINST_ROOT}/lib -L${PE_PARSE_ROOT}/lib -L${SPII_ROOT}/lib -L${TBB_ROOT}/lib64 -L/usr/local/lib \
+  -Wl,-rpath,${BOOST_ROOT}/lib -Wl,-rpath,${DYNINST_ROOT}/lib64 -Wl,-rpath,${DYNINST_ROOT}/lib -Wl,-rpath,${PE_PARSE_ROOT}/lib -Wl,-rpath,${SPII_ROOT}/lib -Wl,-rpath,${TBB_ROOT}/lib64 -Wl,-rpath,/usr/local/lib"
+ENV LDLIBS="-lboost_system -lboost_thread -lboost_filesystem -lboost_chrono -lboost_date_time -lboost_timer -lpthread"
+ENV LIBRARY_PATH="/opt/dyninst-13/lib64:/opt/dyninst-13/lib:/opt/pe-parse/lib:/opt/spii/lib:/usr/local/lib"
+ENV LD_LIBRARY_PATH="/opt/dyninst-13/lib64:/opt/dyninst-13/lib:/opt/pe-parse/lib:/opt/spii/lib:/usr/local/lib:${LD_LIBRARY_PATH}"
+RUN set -eux; \
+  mkdir -p /usr/local/lib; \
+  for d in /opt/dyninst-13/lib64 /opt/dyninst-13/lib /opt/pe-parse/lib /opt/spii/lib; do \
+    [ -d "$d" ] && find "$d" -maxdepth 1 -name 'lib*.so*' -exec ln -sf {} /usr/local/lib/ \; ; \
+  done
+
+RUN /opt/python/cp313-cp313/bin/python -m pip install -U pip build auditwheel && \
+    /opt/python/cp313-cp313/bin/python -m build --wheel -o dist && \
+    auditwheel repair --plat manylinux_2_28_x86_64 -w dist dist/*-cp313-*.whl && \
+    ls -l dist
+
+# ---------- Minimal runtime image ----------
+FROM quay.io/pypa/manylinux_2_28_x86_64 AS runtime
+ENV BOOST_ROOT=/opt/boost-1.89 \
+    TBB_ROOT=/opt/oneTBB-2021.11 \
+    DYNINST_ROOT=/opt/dyninst-13 \
+    PE_PARSE_ROOT=/opt/pe-parse \
+    SPII_ROOT=/opt/spii
+ENV LD_LIBRARY_PATH="${DYNINST_ROOT}/lib64:${DYNINST_ROOT}/lib:${PE_PARSE_ROOT}/lib:${SPII_ROOT}/lib:${TBB_ROOT}/lib64:${BOOST_ROOT}/lib:${LD_LIBRARY_PATH}"
+WORKDIR /opt/functionsimsearch
+
+# Copy 3rd-party installs
+COPY --from=base ${BOOST_ROOT} ${BOOST_ROOT}
+COPY --from=base ${TBB_ROOT} ${TBB_ROOT}
+COPY --from=base ${DYNINST_ROOT} ${DYNINST_ROOT}
+COPY --from=base ${PE_PARSE_ROOT} ${PE_PARSE_ROOT}
+COPY --from=base ${SPII_ROOT} ${SPII_ROOT}
+
+# Copy your compiled tools and the repaired wheel
+COPY --from=tools-build /io/functionsimsearch/bin ./bin
+COPY --from=wheel-build /io/functionsimsearch/dist ./dist
+
+CMD ["/bin/bash"]
